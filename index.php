@@ -1,5 +1,5 @@
 <?php
-require __DIR__ . '/app/db.php';
+require_once __DIR__ . '/app/db.php';
 session_start();
 $hadSessionCompany = isset($_SESSION['company_id']);
 $company = get_company();
