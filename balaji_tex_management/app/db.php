@@ -5,13 +5,19 @@ class DB {
 
     public static function conn() {
         if (self::$pdo === null) {
-            // Railway injects MYSQLHOST etc; if on Railway default DB is 'railway', locally 'balaji_tex'
-            $isRailway = (bool)getenv('MYSQLHOST');
-            $host     = getenv('MYSQLHOST')     ?: (getenv('DB_HOST')     ?: 'localhost');
-            $dbname   = getenv('MYSQLDATABASE') ?: (getenv('DB_NAME')     ?: ($isRailway ? 'railway' : 'balaji_tex'));
-            $username = getenv('MYSQLUSER')     ?: (getenv('DB_USER')     ?: 'root');
-            $password = getenv('MYSQLPASSWORD') ?: (getenv('DB_PASSWORD') ?: '');
-            $port     = getenv('MYSQLPORT')     ?: (getenv('DB_PORT')     ?: '3306');
+            // Robust way to get environment variables across different PHP setups
+            $getVar = function($name) {
+                return getenv($name) ?: ($_SERVER[$name] ?? ($_ENV[$name] ?? null));
+            };
+
+            // Railway injects MYSQLHOST etc; detect environment using Railway system vars
+            $isRailway = (bool)($getVar('MYSQLHOST') ?: $getVar('RAILWAY_PROJECT_NAME'));
+            
+            $host     = $getVar('MYSQLHOST')     ?: ($getVar('DB_HOST')     ?: 'localhost');
+            $port     = $getVar('MYSQLPORT')     ?: ($getVar('DB_PORT')     ?: '3306');
+            $dbname   = $getVar('MYSQLDATABASE') ?: ($getVar('DB_NAME')     ?: ($isRailway ? 'railway' : 'balaji_tex'));
+            $username = $getVar('MYSQLUSER')     ?: ($getVar('DB_USER')     ?: 'root');
+            $password = $getVar('MYSQLPASSWORD') ?: ($getVar('DB_PASSWORD') ?: '');
 
             try {
                 self::$pdo = new PDO(
@@ -21,7 +27,8 @@ class DB {
                 );
                 self::$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
             } catch (PDOException $e) {
-                throw new Exception('Database connection failed: ' . $e->getMessage());
+                // Include host/port in error to understand what it's trying to connect to
+                throw new Exception("Database connection failed ($host:$port): " . $e->getMessage());
             }
         }
         return self::$pdo;
