@@ -5,30 +5,28 @@ class DB {
 
     public static function conn() {
         if (self::$pdo === null) {
-            // Robust way to get environment variables across different PHP setups
-            $getVar = function($name) {
-                return getenv($name) ?: ($_SERVER[$name] ?? ($_ENV[$name] ?? null));
-            };
+            // Railway environment variables
+            $host = getenv('MYSQLHOST');
+            $port = getenv('MYSQLPORT') ?: '3306';
+            $dbname = getenv('MYSQLDATABASE');
+            $username = getenv('MYSQLUSER');
+            $password = getenv('MYSQLPASSWORD');
 
-            // Railway injects MYSQLHOST etc; detect environment using Railway system vars
-            $isRailway = (bool)($getVar('MYSQLHOST') ?: $getVar('RAILWAY_PROJECT_NAME'));
-            
-            $host     = $getVar('MYSQLHOST')     ?: ($getVar('DB_HOST')     ?: 'localhost');
-            $port     = $getVar('MYSQLPORT')     ?: ($getVar('DB_PORT')     ?: '3306');
-            $dbname   = $getVar('MYSQLDATABASE') ?: ($getVar('DB_NAME')     ?: ($isRailway ? 'railway' : 'balaji_tex'));
-            $username = $getVar('MYSQLUSER')     ?: ($getVar('DB_USER')     ?: 'root');
-            $password = $getVar('MYSQLPASSWORD') ?: ($getVar('DB_PASSWORD') ?: '');
+            // Fallback for local development (XAMPP) if Railway vars are missing
+            if (!$host) {
+                $host = getenv('DB_HOST') ?: '127.0.0.1';
+                $dbname = getenv('DB_NAME') ?: 'balaji_tex';
+                $username = getenv('DB_USER') ?: 'root';
+                $password = getenv('DB_PASSWORD') ?: '';
+                $port = getenv('DB_PORT') ?: '3306';
+            }
 
             try {
-                self::$pdo = new PDO(
-                    "mysql:host=$host;port=$port;dbname=$dbname;charset=utf8mb4",
-                    $username,
-                    $password
-                );
+                $dsn = "mysql:host=$host;port=$port;dbname=$dbname;charset=utf8mb4";
+                self::$pdo = new PDO($dsn, $username, $password);
                 self::$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
             } catch (PDOException $e) {
-                // Include host/port in error to understand what it's trying to connect to
-                throw new Exception("Database connection failed ($host:$port): " . $e->getMessage());
+                throw new Exception("Database connection failed for host $host: " . $e->getMessage());
             }
         }
         return self::$pdo;
