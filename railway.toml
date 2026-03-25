@@ -2,7 +2,7 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "php -S 0.0.0.0:$PORT -t balaji_tex_management"
+startCommand = "sh -c 'php -S 0.0.0.0:$PORT -t balaji_tex_management'"
 healthcheckPath = "/health.php"
 healthcheckTimeout = 60
 restartPolicyType = "on_failure"
