@@ -5,6 +5,17 @@ $hadSessionCompany = isset($_SESSION['company_id']);
 $company = get_company();
 $page = $_GET['page'] ?? null;
 
+// PROACTIVE MIGRATION: Auto-create missing tables on Railway
+if (getenv('MYSQLHOST') || getenv('RAILWAY_PROJECT_NAME')) {
+    $pdo = DB::conn();
+    try {
+        $pdo->query("SELECT 1 FROM purchased_stocks LIMIT 1");
+    } catch (Exception $e) {
+        // Table missing, run migration
+        require_once __DIR__ . '/migrate_tables.php';
+    }
+}
+
 // Require controllers
 require_once __DIR__ . '/app/controllers/CompanyController.php';
 require_once __DIR__ . '/app/controllers/YarnTypeController.php';
