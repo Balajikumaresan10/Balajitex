@@ -70,3 +70,34 @@ CREATE TABLE IF NOT EXISTS `advances` (
     FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`) ON DELETE CASCADE,
     FOREIGN KEY (`worker_id`) REFERENCES `workers`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Purchased Stocks table
+CREATE TABLE IF NOT EXISTS `purchased_stocks` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `company_id` INT NOT NULL,
+    `yarn_type_id` INT NOT NULL,
+    `date_purchased` DATE NOT NULL,
+    `supplier_name` VARCHAR(255) NOT NULL,
+    `bag_count` INT NOT NULL,
+    `weight_per_bag` DECIMAL(10,3) NOT NULL,
+    `total_weight` DECIMAL(10,3) NOT NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`) ON DELETE CASCADE,
+    FOREIGN KEY (`yarn_type_id`) REFERENCES `yarn_types`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Stock sales table
+CREATE TABLE IF NOT EXISTS `stock_sales` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `company_id` INT NOT NULL,
+    `yarn_type_id` INT NOT NULL,
+    `stock_type` ENUM('chippam', 'bag') NOT NULL,
+    `sold_date` DATE NOT NULL,
+    `quantity` INT NOT NULL,
+    `weight_per_unit` DECIMAL(10,3) NOT NULL,
+    `total_weight` DECIMAL(10,3) NOT NULL,
+    `notes` TEXT,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`) ON DELETE CASCADE,
+    FOREIGN KEY (`yarn_type_id`) REFERENCES `yarn_types`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
