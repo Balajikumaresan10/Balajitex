@@ -184,6 +184,42 @@ function create_advance($company_id, $worker_id, $advance_date, $amount, $note =
     return $pdo->lastInsertId();
 }
 
+// Purchased Stocks structure
+function list_purchased_stocks($company_id) {
+    $pdo = DB::conn();
+    $stmt = $pdo->prepare('SELECT cur.*, yt.name as yarn_name 
+                            FROM purchased_stocks cur 
+                            JOIN yarn_types yt ON cur.yarn_type_id = yt.id 
+                            WHERE cur.company_id = ? 
+                            ORDER BY cur.date_purchased DESC, cur.id DESC');
+    $stmt->execute([$company_id]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+function delete_purchased_stock($company_id, $id) {
+    $pdo = DB::conn();
+    $stmt = $pdo->prepare('DELETE FROM purchased_stocks WHERE id = ? AND company_id = ?');
+    $stmt->execute([$id, $company_id]);
+}
+
+// Global Summary: Comparison of Purchased vs Production
+function get_yarn_production_summary($company_id) {
+    $pdo = DB::conn();
+    $sql = "SELECT yt.id as yarn_id, yt.name as yarn_name,
+            COALESCE((SELECT SUM(bag_count * weight_per_bag) FROM purchased_stocks ps WHERE ps.yarn_type_id = yt.id AND ps.company_id = ?), 0) as purchased_kg,
+            COALESCE((SELECT SUM(total_bags * bag_weight) FROM stocks s WHERE s.yarn_type_id = yt.id), 0) as finished_kg
+            FROM yarn_types yt
+            WHERE yt.company_id = ?";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([$company_id, $company_id]);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    foreach ($rows as &$r) {
+        $r['pending_kg'] = max(0, $r['purchased_kg'] - $r['finished_kg']);
+    }
+    return $rows;
+}
+
 function e($str) {
     return htmlspecialchars((string)$str, ENT_QUOTES, 'UTF-8');
 }
