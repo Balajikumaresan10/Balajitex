@@ -15,6 +15,10 @@ $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <label class="block text-sm text-gray-700 mb-1">Worker Name</label>
         <input name="name" class="w-full border rounded px-3 py-2" required>
       </div>
+      <div>
+        <label class="block text-sm text-gray-700 mb-1">Daily Salary (₹)</label>
+        <input name="per_day_salary" type="number" step="0.01" class="w-full border rounded px-3 py-2" value="0.00" required>
+      </div>
       <button class="bg-indigo-600 text-white px-4 py-2 rounded">Add</button>
     </form>
   </div>

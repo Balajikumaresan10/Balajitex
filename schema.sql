@@ -39,7 +39,10 @@ CREATE TABLE IF NOT EXISTS `stocks` (
 -- Workers table
 CREATE TABLE IF NOT EXISTS `workers` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
-    `name` VARCHAR(255) NOT NULL
+    `name` VARCHAR(255) NOT NULL,
+    `per_day_salary` DECIMAL(10,2) DEFAULT 0.00,
+    `days_worked` INT DEFAULT 0,
+    `total_salary` DECIMAL(10,2) DEFAULT 0.00
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Work logs table
