@@ -11,9 +11,10 @@ class PurchasedStockController {
         if ($supplier_name === '' || $yarn_type_id <= 0 || $bag_count <= 0 || $weight_per_bag <= 0) {
             throw new Exception('All fields must be filled correctly with values greater than 0');
         }
+        $total_weight = $bag_count * $weight_per_bag;
         
-        $stmt = $pdo->prepare('INSERT INTO purchased_stocks (company_id, yarn_type_id, supplier_name, date_purchased, bag_count, weight_per_bag) VALUES(?, ?, ?, ?, ?, ?)');
-        $stmt->execute([$company['id'], $yarn_type_id, $supplier_name, $date_purchased, $bag_count, $weight_per_bag]);
+        $stmt = $pdo->prepare('INSERT INTO purchased_stocks (company_id, yarn_type_id, supplier_name, date_purchased, bag_count, weight_per_bag, total_weight) VALUES(?, ?, ?, ?, ?, ?, ?)');
+        $stmt->execute([$company['id'], $yarn_type_id, $supplier_name, $date_purchased, $bag_count, $weight_per_bag, $total_weight]);
         
         $_SESSION['flash_error'] = 'Purchased stock added successfully';
         header('Location: index.php?page=purchased_stocks');
