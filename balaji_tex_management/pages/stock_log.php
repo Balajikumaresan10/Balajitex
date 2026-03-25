@@ -1,7 +1,4 @@
 <?php
-// Prevent any layout inclusion
-define('DIRECT_DOWNLOAD', true);
-
 $pdo = DB::conn();
 $company = get_company();
 $from = $_GET['from'] ?? date('Y-m-01');

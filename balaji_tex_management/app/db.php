@@ -1,34 +1,23 @@
 <?php
-// MySQL PDO connection for XAMPP
+// MySQL PDO connection for Docker
 class DB {
     private static $pdo = null;
 
     public static function conn() {
         if (self::$pdo === null) {
-            // Robust way to get environment variables across different PHP setups
-            $getVar = function($name) {
-                return getenv($name) ?: ($_SERVER[$name] ?? ($_ENV[$name] ?? null));
-            };
-
-            // Railway injects MYSQLHOST etc; detect environment using Railway system vars
-            $isRailway = (bool)($getVar('MYSQLHOST') ?: $getVar('RAILWAY_PROJECT_NAME'));
+            // Use environment variables for Docker, fallback to defaults
+            $host = $_ENV['DB_HOST'] ?? 'localhost'; // Default for XAMPP
+            $dbname = $_ENV['DB_NAME'] ?? 'balaji_tex';
+            $username = $_ENV['DB_USER'] ?? 'root';
+            $password = $_ENV['DB_PASSWORD'] ?? '';
+            $port = $_ENV['DB_PORT'] ?? '3306';
             
-            $host     = $getVar('MYSQLHOST')     ?: ($getVar('DB_HOST')     ?: 'localhost');
-            $port     = $getVar('MYSQLPORT')     ?: ($getVar('DB_PORT')     ?: '3306');
-            $dbname   = $getVar('MYSQLDATABASE') ?: ($getVar('DB_NAME')     ?: ($isRailway ? 'railway' : 'balaji_tex'));
-            $username = $getVar('MYSQLUSER')     ?: ($getVar('DB_USER')     ?: 'root');
-            $password = $getVar('MYSQLPASSWORD') ?: ($getVar('DB_PASSWORD') ?: '');
-
             try {
-                self::$pdo = new PDO(
-                    "mysql:host=$host;port=$port;dbname=$dbname;charset=utf8mb4",
-                    $username,
-                    $password
-                );
+                $dsn = "mysql:host=$host;port=$port;dbname=$dbname;charset=utf8mb4";
+                self::$pdo = new PDO($dsn, $username, $password);
                 self::$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
             } catch (PDOException $e) {
-                // Include host/port in error to understand what it's trying to connect to
-                throw new Exception("Database connection failed ($host:$port): " . $e->getMessage());
+                throw new Exception('Database connection failed: ' . $e->getMessage());
             }
         }
         return self::$pdo;
@@ -110,6 +99,94 @@ function add_stock($company_id, $cotton_type, $bag_weight, $total_bags) {
     $stmt = $pdo->prepare('INSERT INTO stocks(cotton_type, bag_weight, total_bags, date) VALUES(?, ?, ?, CURDATE())');
     $stmt->execute([$cotton_type, $bag_weight, $total_bags]);
     return $pdo->lastInsertId();
+}
+
+// Purchased Stocks structure
+function list_purchased_stocks($company_id) {
+    $pdo = DB::conn();
+    $stmt = $pdo->prepare('SELECT p.*, yt.name as yarn_name
+                          FROM purchased_stocks p 
+                          LEFT JOIN yarn_types yt ON p.yarn_type_id = yt.id 
+                          WHERE p.company_id=? 
+                          ORDER BY p.date_purchased DESC, p.id DESC');
+    $stmt->execute([$company_id]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+function delete_purchased_stock($company_id, $id) {
+    $pdo = DB::conn();
+    $stmt = $pdo->prepare('DELETE FROM purchased_stocks WHERE company_id=? AND id=?');
+    $stmt->execute([$company_id, $id]);
+}
+
+// Summary Metrics
+function get_yarn_production_summary($company_id) {
+    $pdo = DB::conn();
+    
+    // Get purchased totals per yarn type
+    // Group by yarn_type_id to get total kg bought
+    $purchased_query = "SELECT yarn_type_id, SUM(total_weight) as purchased_kg 
+                        FROM purchased_stocks 
+                        WHERE company_id = ? 
+                        GROUP BY yarn_type_id";
+    $stmt_purchased = $pdo->prepare($purchased_query);
+    $stmt_purchased->execute([$company_id]);
+    $purchased_data = $stmt_purchased->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Get finished (production) totals per yarn type
+    // Note: bag_weight holds total weight for chippams (with 1 total_bags), 
+    // and for bags we generally calculate total by bag_weight * total_bags (but the DB tracks raw numbers).
+    // Let's accurately sum up based on stock type if necessary or just rely on total weight logic
+    // Actually bag_weight IS the total weight for chippams, but for bags we inserted bag_weight=50, total_bags=X
+    // Therefore effective weight = sum(bag_weight * total_bags)
+    $finished_query = "SELECT s.yarn_type_id, 
+                              SUM(s.total_bags * s.bag_weight) as finished_kg 
+                       FROM stocks s 
+                       JOIN yarn_types yt ON s.yarn_type_id = yt.id
+                       WHERE yt.company_id = ? 
+                       GROUP BY s.yarn_type_id";
+    $stmt_finished = $pdo->prepare($finished_query);
+    $stmt_finished->execute([$company_id]);
+    $finished_data = $stmt_finished->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Get Yarn Types
+    $yarn_types = list_yarn_types($company_id);
+    
+    $summary = [];
+    foreach ($yarn_types as $yt) {
+        $summary[$yt['id']] = [
+            'yarn_name' => $yt['name'],
+            'purchased_kg' => 0.0,
+            'finished_kg' => 0.0,
+            'pending_kg' => 0.0
+        ];
+    }
+    
+    // Merge Purchased
+    foreach ($purchased_data as $row) {
+        if (isset($summary[$row['yarn_type_id']])) {
+            $summary[$row['yarn_type_id']]['purchased_kg'] += (float)$row['purchased_kg'];
+        }
+    }
+    
+    // Merge Finished
+    foreach ($finished_data as $row) {
+        if (isset($summary[$row['yarn_type_id']])) {
+            $summary[$row['yarn_type_id']]['finished_kg'] += (float)$row['finished_kg'];
+        }
+    }
+    
+    // Calculate Pending
+    foreach ($summary as $id => $data) {
+        $summary[$id]['pending_kg'] = max(0, $data['purchased_kg'] - $data['finished_kg']);
+    }
+    
+    // Filter out yarn types with no activity in either purchase or production to keep UI clean
+    $active_summary = array_filter($summary, function($data) {
+        return $data['purchased_kg'] > 0 || $data['finished_kg'] > 0;
+    });
+    
+    return $active_summary;
 }
 
 // Yarn types functions

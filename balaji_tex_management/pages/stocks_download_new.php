@@ -166,10 +166,13 @@ if (empty($chippam_stocks) && empty($bag_stocks)) {
             $sold_number = $stock['sold_bags'] ?? 0;
             $available_number = $total_number - $sold_number;
             
-            // Apply wastage calculation for chippam
+            // Apply wastage calculation for chippam (0.400 per bag)
             $total_wastage = $total_number * 0.400;
-            $total_weight_after_wastage = $total_weight - $total_wastage;
-            $available_weight_after_wastage = $available_weight - ($sold_number * 0.400);
+            $total_weight_after_wastage = max(0, $total_weight - $total_wastage);
+            
+            // For available weight, deduct only the wastage for the unsold items
+            $available_wastage = $available_number * 0.400;
+            $available_weight_after_wastage = max(0, $available_weight - $available_wastage);
             
             $chippam_total_weight += $total_weight_after_wastage;
             $chippam_total_number += $total_number;
@@ -190,11 +193,11 @@ if (empty($chippam_stocks) && empty($bag_stocks)) {
         
         // Chippam Total Row
         $html .= '<tr class="total-row">
-            <td colspan="3" style="text-align: right;">TOTAL</td>
+            <td colspan="3" style="text-align: right;">TOTAL (after 0.4kg wastage/chippam)</td>
             <td class="number-cell">' . (int)$chippam_total_number . '</td>
             <td class="number-cell">' . number_format($chippam_total_weight, 3) . '</td>
-            <td class="number-cell">' . (int)$chippam_available_number . '</td>
-            <td class="number-cell">' . number_format($chippam_available_weight, 3) . '</td>
+            <td class="number-cell" style="color: #059669; font-size: 16px;">' . (int)$chippam_available_number . '</td>
+            <td class="number-cell" style="color: #059669; font-size: 16px;">' . number_format($chippam_available_weight, 3) . ' kg</td>
             <td></td>
         </tr>';
         $html .= '</table>';
@@ -257,8 +260,8 @@ if (empty($chippam_stocks) && empty($bag_stocks)) {
             <td colspan="3" style="text-align: right;">TOTAL</td>
             <td class="number-cell">' . (int)$bag_total_bags . '</td>
             <td class="number-cell">' . number_format($bag_total_weight, 3) . '</td>
-            <td class="number-cell">' . (int)$bag_available_bags . '</td>
-            <td class="number-cell">' . number_format($bag_available_weight, 3) . '</td>
+            <td class="number-cell" style="color: #2563ea; font-size: 16px;">' . (int)$bag_available_bags . '</td>
+            <td class="number-cell" style="color: #2563ea; font-size: 16px;">' . number_format($bag_available_weight, 3) . ' kg</td>
             <td></td>
         </tr>';
         $html .= '</table>';

@@ -3,7 +3,8 @@ $pdo = DB::conn();
 $company = get_company();
 
 // Get date filter from URL or use empty for all dates
-$date_filter = $_GET['date_filter'] ?? '';
+$date_filter_from = $_GET['date_from'] ?? '';
+$date_filter_to = $_GET['date_to'] ?? '';
 
 // Get yarn types for dropdown
 $yarn_stmt = $pdo->prepare('SELECT * FROM yarn_types WHERE company_id=? ORDER BY name');
@@ -11,7 +12,7 @@ $yarn_stmt->execute([$company['id']]);
 $yarn_types = $yarn_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Fetch bag stocks based on date filter
-if (empty($date_filter)) {
+if (empty($date_filter_from) && empty($date_filter_to)) {
     // Get all bag stocks
     $stmt = $pdo->prepare('SELECT s.*, yt.name as yarn_name 
                          FROM stocks s 
@@ -20,18 +21,21 @@ if (empty($date_filter)) {
                          ORDER BY s.date DESC, yt.name ASC, s.id ASC');
     $stmt->execute(['bag']);
 } else {
-    // Get bag stocks for specific date
+    // Get bag stocks for specific date range
+    $from = !empty($date_filter_from) ? $date_filter_from : '1970-01-01';
+    $to = !empty($date_filter_to) ? $date_filter_to : '2099-12-31';
+
     $stmt = $pdo->prepare('SELECT s.*, yt.name as yarn_name 
                          FROM stocks s 
                          LEFT JOIN yarn_types yt ON s.yarn_type_id = yt.id 
-                         WHERE s.stock_type = ? AND s.date = ?
+                         WHERE s.stock_type = ? AND s.date BETWEEN ? AND ?
                          ORDER BY s.date DESC, yt.name ASC, s.id ASC');
-    $stmt->execute(['bag', $date_filter]);
+    $stmt->execute(['bag', $from, $to]);
 }
 $bag_stocks = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Fetch chippam stocks based on date filter
-if (empty($date_filter)) {
+if (empty($date_filter_from) && empty($date_filter_to)) {
     // Get all chippam stocks
     $stmt = $pdo->prepare('SELECT s.*, yt.name as yarn_name 
                          FROM stocks s 
@@ -40,13 +44,16 @@ if (empty($date_filter)) {
                          ORDER BY s.date DESC, yt.name ASC, s.id ASC');
     $stmt->execute(['chippam']);
 } else {
-    // Get chippam stocks for specific date
+    // Get chippam stocks for specific date range
+    $from = !empty($date_filter_from) ? $date_filter_from : '1970-01-01';
+    $to = !empty($date_filter_to) ? $date_filter_to : '2099-12-31';
+
     $stmt = $pdo->prepare('SELECT s.*, yt.name as yarn_name 
                          FROM stocks s 
                          LEFT JOIN yarn_types yt ON s.yarn_type_id = yt.id 
-                         WHERE s.stock_type = ? AND s.date = ?
+                         WHERE s.stock_type = ? AND s.date BETWEEN ? AND ?
                          ORDER BY s.date DESC, yt.name ASC, s.id ASC');
-    $stmt->execute(['chippam', $date_filter]);
+    $stmt->execute(['chippam', $from, $to]);
 }
 $chippam_stocks = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -55,7 +62,7 @@ $daily_bag_totals = [];
 $daily_chippam_totals = [];
 
 // Only calculate daily totals if we're not filtering by a specific date
-if (empty($date_filter)) {
+if (empty($date_filter_from) && empty($date_filter_to)) {
     foreach ($bag_stocks as $stock) {
         $date = $stock['date'];
         if (!isset($daily_bag_totals[$date])) {
@@ -91,21 +98,52 @@ if (empty($date_filter)) {
     }
 }
 
+// Overall Totals for Summary Display
+$overall_stock_counters = [
+    'bag' => ['qty' => 0, 'weight' => 0],
+    'chippam' => ['qty' => 0, 'weight' => 0]
+];
+
+foreach ($bag_stocks as $s) {
+    $overall_stock_counters['bag']['qty'] += $s['total_bags'];
+    $overall_stock_counters['bag']['weight'] += $s['total_bags'] * $s['bag_weight'];
+}
+
+foreach ($chippam_stocks as $s) {
+    $overall_stock_counters['chippam']['qty'] += $s['total_bags'];
+    $overall_stock_counters['chippam']['weight'] += $s['bag_weight'];
+}
+
 // Get all dates that have stocks for the date picker
 $stmt = $pdo->prepare('SELECT DISTINCT date FROM stocks ORDER BY date DESC');
 $stmt->execute();
 $available_dates = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
 ?>
 <section class="mt-6 grid grid-cols-1 gap-6">
   <div class="bg-white p-4 rounded shadow">
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="font-semibold text-lg">Stock Management</h2>
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-6 pb-4 border-b">
+      <div>
+        <h2 class="font-semibold text-2xl text-gray-800">Stock Management</h2>
+        <p class="text-sm text-gray-500">Manage production and sales of yarns</p>
+      </div>
+      
+      <!-- Overall Weight Totals -->
+      <div class="flex flex-wrap gap-4 mt-4 sm:mt-0">
+        <div class="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-center">
+          <span class="text-xs text-blue-600 font-bold uppercase block">Total Weight (Bags)</span>
+          <span class="text-xl font-extrabold text-blue-800 block"><?php echo number_format($overall_stock_counters['bag']['weight'], 2); ?> kg</span>
+          <span class="text-xs text-blue-500 font-bold block pt-1 border-t border-blue-200 mt-1">Qty: <?php echo number_format($overall_stock_counters['bag']['qty']); ?> bags</span>
+        </div>
+        <div class="bg-green-50 border border-green-200 rounded-lg px-4 py-2 text-center">
+          <span class="text-xs text-green-600 font-bold uppercase block">Total Weight (Chippams)</span>
+          <span class="text-xl font-extrabold text-green-800 block"><?php echo number_format($overall_stock_counters['chippam']['weight'], 2); ?> kg</span>
+          <span class="text-xs text-green-500 font-bold block pt-1 border-t border-green-200 mt-1">Qty: <?php echo number_format($overall_stock_counters['chippam']['qty']); ?> items</span>
+        </div>
+      </div>
       <div class="flex gap-3">
         <button onclick="showAddStockForm()" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition-colors">
           Add Stocks
-        </button>
-        <button onclick="showSellStockForm()" class="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700 transition-colors">
-          Selling Stocks
         </button>
       </div>
     </div>
@@ -156,58 +194,36 @@ $available_dates = $stmt->fetchAll(PDO::FETCH_COLUMN);
       </form>
     </div>
 
-    <!-- Sell Stock Form -->
-    <div id="sell_stock_form" class="mb-6 p-4 border rounded bg-orange-50" style="display:none;">
-      <h3 class="font-medium mb-3">Sell Stock</h3>
-      <form method="post" class="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <div>
-          <label class="block text-sm text-gray-600">Sell Type</label>
-          <select name="sell_type" class="w-full border rounded px-3 py-2" required onchange="toggleSellType(this.value)">
-            <option value="">Select sell type</option>
-            <option value="cones">Cones (50kg each)</option>
-            <option value="chippam">Chippam (by weight)</option>
-          </select>
-        </div>
-        <div id="sell_cones_field" style="display:none;">
-          <label class="block text-sm text-gray-600">Number of Cones</label>
-          <input name="sell_cones" type="number" min="1" class="w-full border rounded px-3 py-2" placeholder="Number of cones (50kg each)">
-          <small class="text-gray-500">Each cone = 50kg (auto-calculated)</small>
-        </div>
-        <div id="sell_chippam_field" style="display:none;">
-          <label class="block text-sm text-gray-600">Chippam Weight (kg)</label>
-          <input name="sell_chippam_weight" type="number" step="0.1" min="0.1" class="w-full border rounded px-3 py-2" placeholder="Enter weight in kg">
-          <small class="text-gray-500">Enter actual weight sold</small>
-        </div>
-        <div class="flex items-end">
-          <button type="submit" class="bg-orange-600 text-white px-4 py-2 rounded">Sell Stock</button>
-        </div>
-      </form>
-    </div>
 
     <!-- Current Stocks Table -->
-    <div class="mb-4 flex items-center gap-4">
-      <div>
-        <label class="text-sm text-gray-600">Filter by Date</label>
-        <input type="date" id="stock_date_filter" class="border rounded px-2 py-1" value="<?php echo e($date_filter); ?>" onchange="filterStocksByDate()">
-        <button type="button" onclick="clearDateFilter()" class="ml-2 text-sm text-gray-500 hover:text-gray-700">Clear</button>
+    <div class="mb-4 flex flex-wrap items-center gap-4">
+      <div class="flex items-center gap-2">
+        <label class="text-sm text-gray-600">Filter From</label>
+        <input type="date" id="stock_date_from" class="border rounded px-2 py-1" value="<?php echo e($date_filter_from); ?>" onchange="filterStocksByDateRange()">
+        <label class="text-sm text-gray-600 ml-2">To</label>
+        <input type="date" id="stock_date_to" class="border rounded px-2 py-1" value="<?php echo e($date_filter_to); ?>" onchange="filterStocksByDateRange()">
+        <button type="button" onclick="clearDateFilterRange()" class="ml-2 pl-2 text-sm text-blue-600 hover:text-blue-800 underline">Clear Filters</button>
       </div>
-      <button onclick="deleteAllStocks()" class="bg-red-600 text-white px-4 py-1 rounded hover:bg-red-700 transition-colors">Delete All Stocks</button>
+      <button onclick="deleteAllStocks()" class="bg-red-600 text-white px-4 py-1 rounded hover:bg-red-700 transition-colors ml-auto border">Delete All Stocks</button>
     </div>
     
     <!-- Download Section -->
-    <div class="mb-4 p-4 border rounded bg-gray-50">
-      <h4 class="font-medium mb-3">Stocks_download</h4>
-      <div class="flex items-center gap-4">
-        <div>
-          <label class="text-sm text-gray-600">From</label>
-          <input type="date" id="date_from" class="border rounded px-2 py-1" value="<?php echo date('Y-m-01'); ?>">
+    <div class="mb-4 p-4 border rounded bg-gray-50 flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <h4 class="font-medium mb-3">Download Stocks File</h4>
+        <div class="flex items-center gap-4">
+          <div>
+            <label class="text-sm text-gray-600">From Date</label>
+            <input type="date" id="dl_date_from" class="border rounded px-2 py-1" value="<?php echo !empty($date_filter_from) ? e($date_filter_from) : date('Y-m-01'); ?>">
+          </div>
+          <div>
+            <label class="text-sm text-gray-600">To Date</label>
+            <input type="date" id="dl_date_to" class="border rounded px-2 py-1" value="<?php echo !empty($date_filter_to) ? e($date_filter_to) : date('Y-m-d'); ?>">
+          </div>
         </div>
-        <div>
-          <label class="text-sm text-gray-600">To</label>
-          <input type="date" id="date_to" class="border rounded px-2 py-1" value="<?php echo date('Y-m-d'); ?>">
-        </div>
-        <button onclick="downloadExcel()" class="bg-green-600 text-white px-4 py-1 rounded">stock_download</button>
-        <button onclick="downloadHTML()" class="bg-red-600 text-white px-4 py-1 rounded">Stocks_download</button>
+      </div>
+      <div>
+        <button onclick="downloadHTML()" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors shadow-sm font-medium">Download PDF/HTML</button>
       </div>
     </div>
     
@@ -298,7 +314,7 @@ $available_dates = $stmt->fetchAll(PDO::FETCH_COLUMN);
                   <form method="post" onsubmit="return confirm('Delete this stock record?')" class="inline">
                     <input type="hidden" name="action" value="delete_stock">
                     <input type="hidden" name="stock_id" value="<?php echo (int)$r['id']; ?>">
-                    <button class="bg-red-600 text-white px-3 py-1 rounded text-sm">Delete</button>
+                    <button class="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700">Delete</button>
                   </form>
                 </td>
               </tr>
@@ -341,7 +357,7 @@ $available_dates = $stmt->fetchAll(PDO::FETCH_COLUMN);
         </table>
         
         <!-- Show filtered date total for bag stocks -->
-        <?php if (!empty($date_filter) && !empty($bag_stocks)): ?>
+        <?php if ((!empty($date_filter_from) || !empty($date_filter_to)) && !empty($bag_stocks)): ?>
           <?php
           // Calculate total for filtered date
           $filtered_total_bags = 0;
@@ -359,7 +375,7 @@ $available_dates = $stmt->fetchAll(PDO::FETCH_COLUMN);
               <svg class="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6H4m0 0l6-6m-6 6V9a9 9 0 1118 0 9 9 9v2a3 3 0 006 0 3 3v0a9 9 0 0018 0 9 9 9v2a3 3 0 006 0 3 3v0a9 9 0 0018 0 9 9 9v2a3 3 0 006 0 3 3v0z"/>
               </svg>
-              <span class="text-blue-900 font-bold text-lg">Total for <?php echo e($date_filter); ?></span>
+              <span class="text-blue-900 font-bold text-lg">Total for <?php echo e($date_filter_from ? $date_filter_from : 'Start'); ?> to <?php echo e($date_filter_to ? $date_filter_to : 'End'); ?></span>
             </div>
             <div class="text-blue-700 font-semibold text-center mt-1">
               <span class="mr-4"><?php echo (int)$filtered_total_bags; ?> bags</span>
@@ -453,7 +469,7 @@ $available_dates = $stmt->fetchAll(PDO::FETCH_COLUMN);
                   <form method="post" onsubmit="return confirm('Delete this stock record?')" class="inline">
                     <input type="hidden" name="action" value="delete_stock">
                     <input type="hidden" name="stock_id" value="<?php echo (int)$r['id']; ?>">
-                    <button class="bg-red-600 text-white px-3 py-1 rounded text-sm">Delete</button>
+                    <button class="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700">Delete</button>
                   </form>
                 </td>
               </tr>
@@ -496,7 +512,7 @@ $available_dates = $stmt->fetchAll(PDO::FETCH_COLUMN);
         </table>
         
         <!-- Show filtered date total for chippam stocks -->
-        <?php if (!empty($date_filter) && !empty($chippam_stocks)): ?>
+        <?php if ((!empty($date_filter_from) || !empty($date_filter_to)) && !empty($chippam_stocks)): ?>
           <?php
           // Calculate total for filtered date
           $filtered_total_bags = 0;
@@ -514,7 +530,7 @@ $available_dates = $stmt->fetchAll(PDO::FETCH_COLUMN);
               <svg class="w-5 h-5 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6H4m0 0l6-6m-6 6V9a9 9 0 1118 0 9 9 9v2a3 3 0 006 0 3 3v0a9 9 0 0018 0 9 9 9v2a3 3 0 006 0 3 3v0a9 9 0 0018 0 9 9 9v2a3 3 0 006 0 3 3v0z"/>
               </svg>
-              <span class="text-green-900 font-bold text-lg">Total for <?php echo e($date_filter); ?></span>
+              <span class="text-green-900 font-bold text-lg">Total for <?php echo e($date_filter_from ? $date_filter_from : 'Start'); ?> to <?php echo e($date_filter_to ? $date_filter_to : 'End'); ?></span>
             </div>
             <div class="text-green-700 font-semibold text-center mt-1">
               <span class="mr-4"><?php echo (int)$filtered_total_bags; ?> chippam</span>
@@ -546,6 +562,7 @@ $available_dates = $stmt->fetchAll(PDO::FETCH_COLUMN);
       </div>
     </div>
   </div>
+
 </section>
 
 <script>
@@ -604,29 +621,30 @@ function removeClass(element, className) {
   }
 }
 
-function filterStocksByDate() {
-  var selectedDate = document.getElementById('stock_date_filter').value;
-  if (selectedDate === '') {
-    window.location.href = 'index.php?page=stocks';
+function filterStocksByDateRange() {
+  var fromDate = document.getElementById('stock_date_from').value;
+  var toDate = document.getElementById('stock_date_to').value;
+  var query = [];
+  if (fromDate) query.push('date_from=' + encodeURIComponent(fromDate));
+  if (toDate) query.push('date_to=' + encodeURIComponent(toDate));
+  
+  if (query.length > 0) {
+    window.location.href = 'index.php?page=stocks&' + query.join('&');
   } else {
-    window.location.href = 'index.php?page=stocks&date_filter=' + encodeURIComponent(selectedDate);
+    window.location.href = 'index.php?page=stocks';
   }
 }
 
-function clearDateFilter() {
-  document.getElementById('stock_date_filter').value = '';
+function clearDateFilterRange() {
+  document.getElementById('stock_date_from').value = '';
+  document.getElementById('stock_date_to').value = '';
   window.location.href = 'index.php?page=stocks';
 }
 
 function showAddStockForm() {
   document.getElementById('add_stock_form').style.display = 'block';
-  document.getElementById('sell_stock_form').style.display = 'none';
 }
 
-function showSellStockForm() {
-  document.getElementById('add_stock_form').style.display = 'none';
-  document.getElementById('sell_stock_form').style.display = 'block';
-}
 
 function showPreviousDayStocks(yarnTypeId, currentDate, stockType) {
   // Calculate previous day date
@@ -752,31 +770,9 @@ function displayPreviousDayStocks(stocks, date, stockType) {
   document.getElementById('previousDayContent').innerHTML = html;
 }
 
-// Cross-browser download functions
-function downloadExcel() {
-  var from = document.getElementById('date_from').value;
-  var to = document.getElementById('date_to').value;
-  var url = 'index.php?page=stocks_download&from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to);
-  
-  // Use anchor tag method instead of iframe for better modern browser compatibility
-  var a = document.createElement('a');
-  a.style.display = 'none';
-  a.href = url;
-  a.setAttribute('download', '');
-  document.body.appendChild(a);
-  a.click();
-  
-  // Clean up after download triggers
-  setTimeout(function() {
-    if (a && a.parentNode) {
-      document.body.removeChild(a);
-    }
-  }, 500);
-}
-
 function downloadHTML() {
-  var from = document.getElementById('date_from').value;
-  var to = document.getElementById('date_to').value;
+  var from = document.getElementById('dl_date_from').value;
+  var to = document.getElementById('dl_date_to').value;
   var url = 'index.php?page=stocks_download_new&from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to);
   
   // Use anchor tag method instead of iframe for better modern browser compatibility
@@ -812,18 +808,6 @@ function toggleStockType(type) {
   }
 }
 
-function toggleSellType(type) {
-  var conesField = document.getElementById('sell_cones_field');
-  var chippamField = document.getElementById('sell_chippam_field');
-  
-  if (type === 'cones') {
-    conesField.style.display = 'block';
-    chippamField.style.display = 'none';
-  } else if (type === 'chippam') {
-    conesField.style.display = 'none';
-    chippamField.style.display = 'block';
-  }
-}
 
 function deleteAllStocks() {
   if (confirm('Are you sure you want to delete ALL stock records? This action cannot be undone.')) {
