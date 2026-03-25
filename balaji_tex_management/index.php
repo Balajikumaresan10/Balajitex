@@ -280,10 +280,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Worker add/delete
         if ($action === 'worker_add') {
             $name = trim($_POST['name'] ?? '');
-            $per_day_salary = (float)($_POST['per_day_salary'] ?? 0);
             if ($name === '') throw new Exception('Worker name required');
-            $stmt = $pdo->prepare('INSERT INTO workers(name, per_day_salary) VALUES(?,?)');
-            $stmt->execute([$name, $per_day_salary]);
+            $stmt = $pdo->prepare('INSERT INTO workers(name) VALUES(?)');
+            $stmt->execute([$name]);
             header('Location: index.php?page=workers');
             exit;
         }
